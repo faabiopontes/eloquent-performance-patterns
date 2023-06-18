@@ -147,6 +147,40 @@ collect(explode(' ', $terms)) // split search terms
   // str_getcsv - Parse a CSV string into an array
   // ($string, $separator, $enclosure)
   collect(str_getcsv($terms, ' ', '"'))
+```
 
 - Result: Both queries running at 275 ms
 
+# Lesson 9 - Faster Options Than whereHas
+- First option when `whereHas` is slow try using a `join` instead
+
+```php
+  // Before
+  ->orWhereHas('company', function ($query) use ($term) {
+    $query->where('name', 'like', $term);
+  });
+
+  // After
+  // at the top of scopeSearch
+  $query->join('companies', 'companies.id', '=', 'users.company_id');
+  
+  // ...
+  // replacing whereHas
+  ->orWhere('companies.name', 'like', $term);
+```
+
+- Result: Both queries running at 231 ms
+- Using `EXPLAIN` the indexes show as possible_keys but don't show as key being used
+
+- Second option replace `whereHas` with `whereIn`
+
+```php
+  ->orWhereIn('company_id', function ($query) use ($term) {
+    $query->select('id')
+      ->from('companies')
+      ->where('name', 'like', $term);
+  });
+```
+
+- Result: Both queries running at 94 ms
+- Always try to remove unnecessary dependencies in your query
