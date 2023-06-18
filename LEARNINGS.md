@@ -113,4 +113,40 @@ collect(explode(' ', $terms)) // split search terms
   });
 ```
 
-Result: Both queries running at 326 ms (155/172ms for count/get columns)
+- Result: Both queries running at 326 ms (155/172ms for count/get columns)
+
+## Lesson 8 - Getting LIKE to use an Index
+- Indexes created for `first_name`, `last_name`, `company`
+```php
+  // Company table migration
+  $table->string('name')->index();
+
+  // Users table migration
+  $table->string('first_name')->index();
+  $table->string('last_name')->index();
+```
+
+- To understand what's happening in a query, like which indexes are being used, the `EXPLAIN` keyword should be used before select
+
+- Indexes cant be used to wildcard at the beginning in MySQL
+```php
+  // Before
+  $term = '%'.$term.'%';
+
+  // After
+  $term = $term.'%';
+```
+
+- Search groups solve multi word companies
+
+```php
+  // Before
+  collect(explode(' ', $terms)) // split search terms
+
+  // After
+  // str_getcsv - Parse a CSV string into an array
+  // ($string, $separator, $enclosure)
+  collect(str_getcsv($terms, ' ', '"'))
+
+- Result: Both queries running at 275 ms
+
