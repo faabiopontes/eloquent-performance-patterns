@@ -216,3 +216,38 @@ $query->orWhereIn('company_id', Company::query()
   ->pluck('id')
 );
 ```
+
+# Lesson 11 - Use Unions to Run Queries Independently
+
+- When you run a `UNION` query, both queries should return the same columns
+- To use a `UNION` query inside a `IN` statement, we should use a derived table
+
+```php
+// Before (6 queries / 3.93ms)
+$query->where(function ($query) use ($term) {
+  $query->where('first_name', 'like', $term)
+    ->orWhere('last_name', 'like', $term)
+    ->orWhereIn('company_id', Company::query()
+      ->where('name', 'like', $term)
+      ->pluck('id')
+    );
+});
+
+// After (3 queries / 3.84ms)
+$query->whereIn('id', function ($query) use ($term) {
+  $query->select('id')
+    ->from(function ($query) use ($term) {
+      $query->select('id')
+        ->from('users')
+        ->where('first_name', 'like', $term)
+        ->orWhere('last_name', 'like', $term)
+        ->union(
+          $query->newQuery()
+            ->select('users.id')
+            ->from('users')
+            ->join('companies', 'companies.id', '=', 'users.company_id')
+            ->where('companies.name', 'like', $term)
+        );
+    }, 'matches');
+})
+```
