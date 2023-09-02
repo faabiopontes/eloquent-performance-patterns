@@ -251,3 +251,72 @@ $query->whereIn('id', function ($query) use ($term) {
     }, 'matches');
 })
 ```
+
+# Lesson 12 - Fuzzier Searching With Regular Expressions
+
+- Problem: Searching "Tim Oreilly" and "VanGogh" doesn't return any results
+
+```php
+// Before (3 queries / 3.84ms)
+$term = $term.'%';
+...
+->where('first_name', 'like', $term)
+->orWhere('last_name', 'like', $term)
+...
+->where('companies.name', 'like', $term)
+
+// After (3 queries / 595ms)
+$term = preg_replace('/[^A-Za-z0-9]/', '', $term).'%';
+...
+->whereRaw("regexp_replace(first_name, '[^A-Za-z-0-9]', '') like ?", [$term])
+->orWhereRaw("regexp_replace(last_name, '[^A-Za-z-0-9]', '') like ?", [$term])
+...
+->orWhereRaw("regexp_replace(companies.name, '[^A-Za-z-0-9]', '') like ?", [$term])
+
+```
+
+- We need to create a new column to be able to use indexes
+- Unless you absolutely need and index, remove it
+- They cost space and computation when the column value changes
+
+```php
+  // Company table migration
+  // Before
+  $table->string('name')->index();
+
+  // After
+  $table->string('name'); // or ->dropIndex('name') in case it was already ran
+  $table->string('name_normalized')
+    ->virtualAs("regexp_replace(companies.name, '[^A-Za-z-0-9]', '')")
+    ->index();
+
+  // Users table migration
+  // Before
+  $table->string('first_name')->index();
+  $table->string('last_name')->index();
+
+  // After
+  $table->string('first_name'); // or ->dropIndex('name') in case it was already ran
+  $table->string('first_name_normalized')
+    ->virtualAs("regexp_replace(companies.name, '[^A-Za-z-0-9]', '')")
+    ->index();
+  $table->string('last_name'); // or ->dropIndex('name') in case it was already ran
+  $table->string('last_name_normalized')
+    ->virtualAs("regexp_replace(companies.name, '[^A-Za-z-0-9]', '')")
+    ->index();
+
+  // User.php
+  // Before (3 queries / 595ms)
+  // ...
+  ->whereRaw("regexp_replace(first_name, '[^A-Za-z-0-9]', '') like ?", [$term])
+  ->orWhereRaw("regexp_replace(last_name, '[^A-Za-z-0-9]', '') like ?", [$term])
+  // ...
+  ->orWhereRaw("regexp_replace(companies.name, '[^A-Za-z-0-9]', '') like ?", [$term])
+
+  // After (3 queries, 8 ms)
+  // ...
+  ->whereRaw('first_name_normalized', 'like', $term)
+  ->orWhereRaw('last_name_normalized', 'like', $term)
+  // ...
+  ->orWhereRaw('companies.name_normalized', 'like', $term)
+```
