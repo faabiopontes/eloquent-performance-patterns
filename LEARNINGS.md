@@ -385,3 +385,59 @@ public function scopeVisibleTo($query, User $user)
 
 - Sometimes we can't do things in the Controller and have to go to the database layer with scopes
 - This is a simple example, but can be used in much more complex examples
+
+## Lesson 14 - Faster Ordering With Compound Indexes
+- Added two order by statements
+```php
+// Before (2 queries, 5ms)
+$users = User::query()
+  ->paginate();
+
+// After (2 queries, 95ms)
+$users = User::query()
+  ->orderBy('last_name')
+  ->orderBy('first_name')
+  ->paginate();
+```
+
+- Add migrations for `first_name` and `last_name`
+
+```php
+// Before
+$table->string('first_name');
+$table->string('last_name');
+
+// After
+$table->string('first_name')->index();
+$table->string('last_name')->index();
+```
+
+- Rerun migrations and seeder
+
+```sh
+php artisan migrate:fresh --seed
+```
+
+- No impact in query time
+
+- Running query with `EXPLAIN` in beginning we see that the query is not using the keys
+
+- That's because our indexes are to be used separately
+
+- We should create one index for both
+
+```php
+// Before
+$table->string('first_name')->index();
+$table->string('last_name')->index();
+
+// After
+$table->string('first_name');
+$table->string('last_name');
+$table->index(['first_name','last_name']);
+```
+
+- Only thing to notice is that the order of the `ORDER BY` statements matter
+- The way above it will only work if the `ORDER BY` `first_name` comes before the `last_name`
+- For it to work the other way the order of the `index` array should be reversed
+- You can duplicate it so it works both ways but that's unnecessarily expensive
