@@ -320,3 +320,68 @@ $term = preg_replace('/[^A-Za-z0-9]/', '', $term).'%';
   // ...
   ->orWhereRaw('companies.name_normalized', 'like', $term)
 ```
+
+# Section 3 - Performance
+
+## Lesson 13 - Run Authorization Policies in the Database
+
+- If sales representative is owner, it should be able to see all customers of the company
+
+```php
+// CustomerPolicy
+public function view(User $user, Customer $customer)
+{
+  return $user->is_owner || $user->id === $customer->sales_rep_id;
+}
+
+// CustomersController
+public function index()
+{
+  Auth::login(User::where('name', 'Sarah Seller')->first());
+}
+
+// customers.blade
+@foreach ($customers as $customer)
+  @can('view', $customer)
+  ...
+  @endcan
+@endforeach
+```
+
+- This kind of fixes the problem, but breaks pagination
+
+```php
+// CustomersController
+$customers = Customer::query()
+  // ...
+  ->get() // this is bad because loads all users
+  ->filter(function ($customer) {
+    return Auth::user()->can('view', $customer);
+  });
+
+// customers.blade
+```
+
+- This loads all users and breaks pagination
+
+```php
+// CustomersController
+$customers = Customer::query()
+  ->with('salesRep')
+  // Before
+  ->get()
+  // After
+  ->visibleTo(Auth::user());
+
+// Customer.php
+public function scopeVisibleTo($query, User $user)
+{
+  if ($user->is_owner) {
+    return;
+  }
+  $query->where('sales_rep_id', $user->id);
+}
+```
+
+- Sometimes we can't do things in the Controller and have to go to the database layer with scopes
+- This is a simple example, but can be used in much more complex examples
